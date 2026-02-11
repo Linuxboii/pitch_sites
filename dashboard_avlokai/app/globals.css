@@ -1,0 +1,314 @@
+@import "tailwindcss";
+
+@import "tw-animate-css";
+
+
+@layer theme {
+  :root {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+}
+
+:root {
+  /* Enterprise Dark Color System */
+  --background: #0B0F14;
+  --foreground: #E5E7EB;
+
+  --card: #111827;
+  --card-foreground: #E5E7EB;
+
+  --popover: #111827;
+  --popover-foreground: #E5E7EB;
+
+  --primary: #3B82F6;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #0F172A;
+  --secondary-foreground: #CBD5E1;
+
+  --muted: #1E293B;
+  --muted-foreground: #64748B;
+
+  --accent: #1E293B;
+  --accent-foreground: #E2E8F0;
+
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: #3B82F6;
+
+  --radius: 0.75rem;
+
+  /* Semantic Colors */
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --error: #EF4444;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 40px rgba(0, 0, 0, 0.4);
+
+  /* Sidebar */
+  --sidebar-bg: #0A0E13;
+}
+
+/* ─── Base ─── */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  /* Smooth scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+}
+
+/* ─── Global Transitions ─── */
+@layer utilities {
+  .transition-default {
+    transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hover-lift {
+    transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .hover-lift:active {
+    transform: scale(0.98) translateY(0px);
+  }
+
+  .card-surface {
+    background-color: var(--card);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .card-surface:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: var(--shadow-md);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1), 0 0 20px rgba(59, 130, 246, 0.06);
+  }
+
+  /* Text hierarchy */
+  .text-title {
+    font-size: 1.375rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    color: #F9FAFB;
+  }
+
+  .text-section {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1.5;
+    color: #E5E7EB;
+  }
+
+  .text-body {
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: #CBD5E1;
+  }
+
+  .text-meta {
+    font-size: 0.6875rem;
+    line-height: 1.5;
+    color: #64748B;
+  }
+}
+
+/* ─── Table Polish ─── */
+table tbody tr {
+  transition: background-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+table tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(12px);
+}
+
+/* ─── Selection ─── */
+::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: #F9FAFB;
+}
+
+/* ─── Focus Rings ─── */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ─── Button Active State ─── */
+button {
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button:hover {
+  filter: brightness(1.06);
+}
+
+/* ─── Skeleton Pulse ─── */
+@keyframes skeleton-pulse {
+
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.skeleton-pulse {
+  animation: skeleton-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ─── Staggered Entry ─── */
+@keyframes stagger-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stagger-item {
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stagger-item.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── Enhanced Focus ─── */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25),
+    0 0 0 4px rgba(59, 130, 246, 0.08);
+  transition: box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Cursor-Aware Card ─── */
+.cursor-card {
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, box-shadow;
+}
+
+/* ─── Sidebar Active Indicator ─── */
+@keyframes indicator-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scaleY(0.6);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scaleY(1);
+  }
+}
+
+.sidebar-indicator {
+  animation: indicator-enter 200ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* ─── Table Cell Fade ─── */
+table tbody td {
+  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+table tbody tr:hover td {
+  opacity: 1;
+}
+
+/* ─── Smooth Page Transitions ─── */
+main {
+  animation: stagger-fade-in 250ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
