@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Play, CheckCircle2, XCircle, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getExecutions, type ExecutionUI } from "@/app/actions/n8n";
+import { getExecutions } from "@/app/actions/n8n";
+import { type ExecutionUI } from "@/app/types/n8n";
 import { TableRowSkeleton } from "@/components/ui/Skeleton";
 import { useStaggeredEntry } from "@/hooks/useStaggeredEntry";
 
@@ -13,7 +14,7 @@ export default function ExecutionsPage() {
     const [executions, setExecutions] = useState<ExecutionUI[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState("All Statuses");
-    const visible = useStaggeredEntry(100, 40, 100);
+    const visible = useStaggeredEntry(20, 40, 100);
 
     useEffect(() => {
         async function fetchExecutions() {
@@ -123,8 +124,8 @@ export default function ExecutionsPage() {
                                     style={{
                                         borderTop: "1px solid rgba(255, 255, 255, 0.03)",
                                         transition: "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms, transform 200ms",
-                                        opacity: visible[index + 2] ? 1 : 0,
-                                        transform: visible[index + 2] ? "translateY(0)" : "translateY(3px)",
+                                        opacity: visible[index + 2] !== false ? 1 : 0,
+                                        transform: visible[index + 2] !== false ? "translateY(0)" : "translateY(3px)",
                                     }}
                                     onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.03)"; }}
                                     onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}

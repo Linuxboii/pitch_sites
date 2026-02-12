@@ -1,5 +1,5 @@
 import { Node, Edge } from '@xyflow/react';
-import { N8nWorkflow, N8nNode } from '@/app/actions/n8n';
+import { N8nWorkflow, N8nNode } from "@/app/types/n8n";
 
 export function transformToReactFlow(workflow: N8nWorkflow | null): { nodes: Node[]; edges: Edge[] } {
     if (!workflow) return { nodes: [], edges: [] };

@@ -4,23 +4,31 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianG
 import { cn } from "@/lib/utils";
 import { useCursorTracker } from "@/hooks/useCursorTracker";
 
-const data = [
-    { time: "00:00", runs: 120 },
-    { time: "04:00", runs: 85 },
-    { time: "08:00", runs: 450 },
-    { time: "12:00", runs: 980 },
-    { time: "16:00", runs: 850 },
-    { time: "20:00", runs: 340 },
-    { time: "23:59", runs: 180 },
+const fallbackData = [
+    { time: "00:00", runs: 0 },
+    { time: "04:00", runs: 0 },
+    { time: "08:00", runs: 0 },
+    { time: "12:00", runs: 0 },
+    { time: "16:00", runs: 0 },
+    { time: "20:00", runs: 0 },
 ];
 
-export function SystemHealthChart({ className }: { className?: string }) {
+interface SystemHealthChartProps {
+    className?: string;
+    data?: { time: string; runs: number }[];
+}
+
+export function SystemHealthChart({ className, data }: SystemHealthChartProps) {
     const { ref, cursor } = useCursorTracker<HTMLDivElement>();
+
+    // Use real data if available, collapse to 6 time slots for readability
+    const chartData = data && data.length > 0 ? collapseHourly(data) : fallbackData;
+    const hasData = data && data.some(d => d.runs > 0);
 
     return (
         <div
             ref={ref}
-            className={cn("rounded-xl p-6 cursor-card", className)}
+            className={cn("rounded-xl p-6 cursor-card relative", className)}
             style={{
                 backgroundColor: "#111827",
                 borderWidth: "1px",
@@ -42,28 +50,18 @@ export function SystemHealthChart({ className }: { className?: string }) {
             )}
 
             <div className="relative z-10 mb-6 flex items-center justify-between">
-                <h3 className="text-[15px] font-medium" style={{ color: "#E5E7EB" }}>
-                    Automation Volume
-                </h3>
-                <select
-                    className="rounded-lg px-3 py-1.5 text-[12px] font-medium outline-none"
-                    style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.04)",
-                        borderWidth: "1px",
-                        borderStyle: "solid",
-                        borderColor: "rgba(255, 255, 255, 0.06)",
-                        color: "#94A3B8",
-                        transition: "all 180ms cubic-bezier(0.4, 0, 0.2, 1)",
-                    }}
-                >
-                    <option>Last 24 Hours</option>
-                    <option>Last 7 Days</option>
-                    <option>Last 30 Days</option>
-                </select>
+                <div>
+                    <h3 className="text-[15px] font-medium" style={{ color: "#E5E7EB" }}>
+                        Automation Volume
+                    </h3>
+                    <p className="text-[11px] mt-0.5" style={{ color: "#475569" }}>
+                        {hasData ? "Last 24 hours" : "No executions in the last 24 hours"}
+                    </p>
+                </div>
             </div>
-            <div className="relative z-10 h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data}>
+            <div className="relative z-10 h-[300px] w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <AreaChart data={chartData}>
                         <defs>
                             <linearGradient id="runGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.15} />
@@ -91,6 +89,7 @@ export function SystemHealthChart({ className }: { className?: string }) {
                             axisLine={false}
                             dx={-10}
                             fontFamily="'Inter', sans-serif"
+                            allowDecimals={false}
                         />
                         <Tooltip
                             contentStyle={{
@@ -106,6 +105,7 @@ export function SystemHealthChart({ className }: { className?: string }) {
                             itemStyle={{ color: "#3B82F6" }}
                             cursor={{ stroke: "rgba(59, 130, 246, 0.2)", strokeWidth: 1 }}
                             animationDuration={150}
+                            formatter={(value: number | undefined) => [`${value ?? 0} runs`, 'Executions']}
                         />
                         <Area
                             type="monotone"
@@ -128,4 +128,22 @@ export function SystemHealthChart({ className }: { className?: string }) {
             </div>
         </div>
     );
+}
+
+// Groups 24 hourly data points into 8 three-hour blocks for readability
+function collapseHourly(data: { time: string; runs: number }[]): { time: string; runs: number }[] {
+    const blocks: { time: string; runs: number }[] = [];
+    const sortedData = [...data].sort((a, b) => a.time.localeCompare(b.time));
+
+    for (let i = 0; i < 24; i += 3) {
+        const label = `${i.toString().padStart(2, '0')}:00`;
+        let sum = 0;
+        for (let j = i; j < i + 3 && j < 24; j++) {
+            const key = `${j.toString().padStart(2, '0')}:00`;
+            const found = sortedData.find(d => d.time === key);
+            if (found) sum += found.runs;
+        }
+        blocks.push({ time: label, runs: sum });
+    }
+    return blocks;
 }

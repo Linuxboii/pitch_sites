@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle, Clock, Calendar, Loader2 } from "lucide-react";
-import { getExecutions, type ExecutionUI } from "@/app/actions/n8n";
+import { getExecutions } from "@/app/actions/n8n";
+import { type ExecutionUI } from "@/app/types/n8n";
 import { TableRowSkeleton } from "@/components/ui/Skeleton";
 import { useStaggeredEntry } from "@/hooks/useStaggeredEntry";
 

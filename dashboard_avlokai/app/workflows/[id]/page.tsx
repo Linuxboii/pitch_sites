@@ -3,7 +3,8 @@
 import { use, useEffect, useState } from "react";
 import { WorkflowCanvas } from "@/components/workflows/WorkflowCanvas";
 import { WorkflowInspector } from "@/components/workflows/WorkflowInspector";
-import { getWorkflowDetails, getExecutions, N8nWorkflow, ExecutionUI } from "@/app/actions/n8n";
+import { getWorkflowDetails, getExecutions } from "@/app/actions/n8n";
+import { type N8nWorkflow, type ExecutionUI } from "@/app/types/n8n";
 import { transformToReactFlow } from "@/lib/workflow-transformer";
 import { Node, Edge } from "@xyflow/react";
 import { Loader2 } from "lucide-react";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import {
     Settings,
@@ -10,9 +10,13 @@ import {
     Save,
     RefreshCw,
     CheckCircle2,
-    Globe
+    Globe,
+    Zap,
+    ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getN8nStatus, getWorkflows, getExecutionStats } from "@/app/actions/n8n";
+import { type N8nWorkflow, type ExecutionStats } from "@/app/types/n8n";
 
 const tabs = [
     { id: "general", label: "General", icon: Settings },
@@ -23,6 +27,30 @@ const tabs = [
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("general");
+    const [n8nConnected, setN8nConnected] = useState(false);
+    const [workflowCount, setWorkflowCount] = useState(0);
+    const [stats, setStats] = useState<ExecutionStats | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchStatus() {
+            try {
+                const [status, workflows, execStats] = await Promise.all([
+                    getN8nStatus(),
+                    getWorkflows(),
+                    getExecutionStats(),
+                ]);
+                setN8nConnected(status.connected);
+                setWorkflowCount(workflows.length);
+                setStats(execStats);
+            } catch (err) {
+                console.error("Failed to fetch settings data", err);
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchStatus();
+    }, []);
 
     const inputStyle = {
         backgroundColor: "rgba(255, 255, 255, 0.03)",
@@ -159,58 +187,104 @@ export default function SettingsPage() {
                             >
                                 <h2 className="text-[15px] font-medium mb-5" style={{ color: "#E5E7EB" }}>Connected Services</h2>
                                 <div className="space-y-3">
-                                    {[
-                                        { name: "Stripe", desc: "Payments & Billing", color: "#3B82F6", initial: "S", connected: true },
-                                        { name: "HubSpot", desc: "CRM & Marketing", color: "#F59E0B", initial: "H", connected: true },
-                                        { name: "Slack", desc: "Notifications", color: "#A855F7", initial: "S", connected: false },
-                                    ].map((service) => (
-                                        <div
-                                            key={service.name}
-                                            className="flex items-center justify-between rounded-xl p-4"
-                                            style={{
-                                                backgroundColor: "rgba(255, 255, 255, 0.02)",
-                                                borderWidth: "1px",
-                                                borderStyle: "solid",
-                                                borderColor: "rgba(255, 255, 255, 0.05)",
-                                                transition: "all 180ms cubic-bezier(0.4, 0, 0.2, 1)",
-                                            }}
-                                        >
-                                            <div className="flex items-center gap-4">
-                                                <div
-                                                    className="h-10 w-10 rounded-lg flex items-center justify-center text-[13px] font-bold"
-                                                    style={{ backgroundColor: `${service.color}10`, color: service.color }}
-                                                >
-                                                    {service.initial}
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-[13px] font-medium" style={{ color: "#E5E7EB" }}>{service.name}</h3>
-                                                    <p className="text-[11px]" style={{ color: "#64748B" }}>{service.desc}</p>
-                                                </div>
+                                    {/* n8n Integration */}
+                                    <div
+                                        className="flex items-center justify-between rounded-xl p-4"
+                                        style={{
+                                            backgroundColor: "rgba(255, 255, 255, 0.02)",
+                                            borderWidth: "1px",
+                                            borderStyle: "solid",
+                                            borderColor: n8nConnected ? "rgba(34, 197, 94, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                                            transition: "all 180ms cubic-bezier(0.4, 0, 0.2, 1)",
+                                        }}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div
+                                                className="h-10 w-10 rounded-lg flex items-center justify-center"
+                                                style={{ backgroundColor: n8nConnected ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)" }}
+                                            >
+                                                <Zap className="h-5 w-5" style={{ color: n8nConnected ? "#22C55E" : "#EF4444" }} strokeWidth={1.5} />
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                {service.connected ? (
-                                                    <>
-                                                        <Badge variant="success">Connected</Badge>
-                                                        <button className="text-[12px] font-medium" style={{ color: "#64748B", transition: "color 180ms" }}>Configure</button>
-                                                    </>
-                                                ) : (
-                                                    <button
-                                                        className="rounded-lg px-3 py-1.5 text-[12px] font-medium"
-                                                        style={{
-                                                            backgroundColor: "transparent",
-                                                            borderWidth: "1px",
-                                                            borderStyle: "solid",
-                                                            borderColor: "rgba(255, 255, 255, 0.08)",
-                                                            color: "#CBD5E1",
-                                                            transition: "all 180ms cubic-bezier(0.4, 0, 0.2, 1)",
-                                                        }}
-                                                    >
-                                                        Connect
-                                                    </button>
-                                                )}
+                                            <div>
+                                                <h3 className="text-[13px] font-medium" style={{ color: "#E5E7EB" }}>n8n Automation Engine</h3>
+                                                <p className="text-[11px]" style={{ color: "#64748B" }}>
+                                                    {loading ? "Checking connection…" : n8nConnected
+                                                        ? `${workflowCount} workflows · ${stats?.totalExecutions ?? 0} total executions`
+                                                        : "Connection failed – check API key"}
+                                                </p>
                                             </div>
                                         </div>
-                                    ))}
+                                        <div className="flex items-center gap-3">
+                                            <Badge variant={loading ? "secondary" : n8nConnected ? "success" : "destructive"}>
+                                                {loading ? "Checking…" : n8nConnected ? "Connected" : "Disconnected"}
+                                            </Badge>
+                                            <a
+                                                href="https://n8n.avlokai.com"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-[12px] font-medium flex items-center gap-1"
+                                                style={{ color: "#3B82F6", transition: "color 180ms" }}
+                                            >
+                                                <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                                                Open
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                    {/* n8n API Details */}
+                                    <div
+                                        className="rounded-xl p-4"
+                                        style={{
+                                            backgroundColor: "rgba(255, 255, 255, 0.02)",
+                                            borderWidth: "1px",
+                                            borderStyle: "solid",
+                                            borderColor: "rgba(255, 255, 255, 0.05)",
+                                        }}
+                                    >
+                                        <h4 className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: "#475569" }}>
+                                            API Configuration
+                                        </h4>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <Globe className="h-3.5 w-3.5" style={{ color: "#475569" }} strokeWidth={1.5} />
+                                                <span className="text-[11px] font-medium" style={{ color: "#94A3B8" }}>Endpoint:</span>
+                                                <code className="text-[11px] px-1.5 py-0.5 rounded-md" style={{
+                                                    backgroundColor: "rgba(255, 255, 255, 0.04)",
+                                                    color: "#94A3B8",
+                                                    fontFamily: "'JetBrains Mono', monospace",
+                                                }}>
+                                                    https://n8n.avlokai.com/api/v1
+                                                </code>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Lock className="h-3.5 w-3.5" style={{ color: "#475569" }} strokeWidth={1.5} />
+                                                <span className="text-[11px] font-medium" style={{ color: "#94A3B8" }}>API Key:</span>
+                                                <code className="text-[11px] px-1.5 py-0.5 rounded-md" style={{
+                                                    backgroundColor: "rgba(255, 255, 255, 0.04)",
+                                                    color: "#94A3B8",
+                                                    fontFamily: "'JetBrains Mono', monospace",
+                                                }}>
+                                                    ••••••••••••••••
+                                                </code>
+                                                <span className="text-[10px]" style={{ color: "#475569" }}>(server-side only)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Placeholder for future integrations */}
+                                    <div
+                                        className="rounded-xl p-4 flex items-center justify-center"
+                                        style={{
+                                            borderWidth: "1px",
+                                            borderStyle: "dashed",
+                                            borderColor: "rgba(255, 255, 255, 0.06)",
+                                            minHeight: "64px",
+                                        }}
+                                    >
+                                        <span className="text-[12px]" style={{ color: "#475569" }}>
+                                            More integrations coming soon (Stripe, HubSpot, Slack…)
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -305,7 +379,7 @@ export default function SettingsPage() {
                                             <label className="text-[12px] font-medium" style={{ color: "#94A3B8" }}>Last Heartbeat</label>
                                             <div className="flex items-center gap-2">
                                                 <CheckCircle2 className="h-4 w-4" style={{ color: "#22C55E" }} strokeWidth={1.5} />
-                                                <span className="text-[12px]" style={{ color: "#64748B" }}>Just now (10:42:30 AM)</span>
+                                                <span className="text-[12px]" style={{ color: "#64748B" }}>Just now</span>
                                             </div>
                                         </div>
                                     </div>

@@ -17,7 +17,8 @@ import {
     Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getWorkflows, type WorkflowUI } from "@/app/actions/n8n";
+import { getWorkflows, getN8nStatus } from "@/app/actions/n8n";
+import { type WorkflowUI } from "@/app/types/n8n";
 import { useStaggeredEntry } from "@/hooks/useStaggeredEntry";
 import { useCursorTracker, getCursorStyles } from "@/hooks/useCursorTracker";
 
@@ -57,12 +58,14 @@ function WorkflowCard({ workflow }: { workflow: WorkflowUI }) {
                     "rounded-lg p-2.5 sm:p-3",
                 )} style={{
                     backgroundColor: workflow.trigger === "Webhook" ? "rgba(59, 130, 246, 0.08)" :
-                        workflow.trigger === "Cron" ? "rgba(245, 158, 11, 0.08)" : "rgba(168, 85, 247, 0.08)",
+                        workflow.trigger === "Schedule" ? "rgba(245, 158, 11, 0.08)" :
+                            workflow.trigger === "WhatsApp" ? "rgba(34, 197, 94, 0.08)" : "rgba(168, 85, 247, 0.08)",
                     transition: "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1)",
                 }}>
                     {workflow.trigger === "Webhook" && <Webhook className="h-5 w-5 sm:h-5 sm:w-5" style={{ color: "#3B82F6", transition: "transform 180ms", transform: cursor.isInside ? "scale(1.08)" : "scale(1)" }} strokeWidth={1.5} />}
-                    {workflow.trigger === "Cron" && <Clock className="h-5 w-5 sm:h-5 sm:w-5" style={{ color: "#F59E0B", transition: "transform 180ms", transform: cursor.isInside ? "scale(1.08)" : "scale(1)" }} strokeWidth={1.5} />}
-                    {workflow.trigger === "Event" && <Mail className="h-5 w-5 sm:h-5 sm:w-5" style={{ color: "#A855F7", transition: "transform 180ms", transform: cursor.isInside ? "scale(1.08)" : "scale(1)" }} strokeWidth={1.5} />}
+                    {workflow.trigger === "Schedule" && <Calendar className="h-5 w-5 sm:h-5 sm:w-5" style={{ color: "#F59E0B", transition: "transform 180ms", transform: cursor.isInside ? "scale(1.08)" : "scale(1)" }} strokeWidth={1.5} />}
+                    {workflow.trigger === "WhatsApp" && <Mail className="h-5 w-5 sm:h-5 sm:w-5" style={{ color: "#22C55E", transition: "transform 180ms", transform: cursor.isInside ? "scale(1.08)" : "scale(1)" }} strokeWidth={1.5} />}
+                    {!["Webhook", "Schedule", "WhatsApp"].includes(workflow.trigger) && <Play className="h-5 w-5 sm:h-5 sm:w-5" style={{ color: "#A855F7", transition: "transform 180ms", transform: cursor.isInside ? "scale(1.08)" : "scale(1)" }} strokeWidth={1.5} />}
                 </div>
 
                 <div className="space-y-1.5">
@@ -84,13 +87,18 @@ function WorkflowCard({ workflow }: { workflow: WorkflowUI }) {
                             <Play className="h-3 w-3" strokeWidth={1.5} /> {workflow.runs} runs
                         </span>
                         <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" strokeWidth={1.5} /> Last: {workflow.lastRun}
+                            <Clock className="h-3 w-3" strokeWidth={1.5} /> {workflow.lastRun}
                         </span>
-                        <span className={cn("flex items-center gap-1 font-medium")} style={{
-                            color: workflow.successRate >= 98 ? "#22C55E" :
-                                workflow.successRate < 98 && workflow.successRate > 90 ? "#F59E0B" : "#EF4444"
-                        }}>
-                            {workflow.successRate}% success
+                        {workflow.runs > 0 && (
+                            <span className={cn("flex items-center gap-1 font-medium")} style={{
+                                color: workflow.successRate >= 90 ? "#22C55E" :
+                                    workflow.successRate >= 70 ? "#F59E0B" : "#EF4444"
+                            }}>
+                                {workflow.successRate}% success
+                            </span>
+                        )}
+                        <span className="flex items-center gap-1" style={{ color: "#475569" }}>
+                            {workflow.nodeCount} nodes
                         </span>
                     </div>
                 </div>
@@ -298,8 +306,8 @@ export default function WorkflowsPage() {
                         <div
                             key={workflow.id}
                             style={{
-                                opacity: visible[i + 2] ? 1 : 0,
-                                transform: visible[i + 2] ? "translateY(0)" : "translateY(4px)",
+                                opacity: visible[i + 2] !== false ? 1 : 0,
+                                transform: visible[i + 2] !== false ? "translateY(0)" : "translateY(4px)",
                                 transition: "opacity 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1)",
                             }}
                         >

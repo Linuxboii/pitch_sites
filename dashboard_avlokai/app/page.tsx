@@ -5,17 +5,15 @@ import { KPICard } from "@/components/ui/KPICard";
 import { KPICardSkeleton } from "@/components/ui/Skeleton";
 import { SystemHealthChart } from "@/components/dashboard/SystemHealthChart";
 import { RecentActivityTable } from "@/components/dashboard/RecentActivityTable";
-import { Activity, Database, Server, Smartphone, Zap, Loader2 } from "lucide-react";
-import { getWorkflows, getN8nStatus } from "@/app/actions/n8n";
+import { Activity, Database, Server, CheckCircle, Zap } from "lucide-react";
+import { getDashboardData } from "@/app/actions/n8n";
+import { type DashboardData } from "@/app/types/n8n";
 import { cn } from "@/lib/utils";
 import { useStaggeredEntry } from "@/hooks/useStaggeredEntry";
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({
-    totalWorkflows: 0,
-    n8nConnected: false,
-    loading: true
-  });
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const kpiVisible = useStaggeredEntry(4, 70, 100);
   const sectionVisible = useStaggeredEntry(3, 100, 400);
@@ -23,19 +21,12 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [workflows, status] = await Promise.all([
-          getWorkflows(),
-          getN8nStatus()
-        ]);
-
-        setStats({
-          totalWorkflows: workflows.length,
-          n8nConnected: status.connected,
-          loading: false
-        });
+        const dashData = await getDashboardData();
+        setData(dashData);
       } catch (error) {
         console.error("Failed to fetch dashboard data", error);
-        setStats(s => ({ ...s, loading: false }));
+      } finally {
+        setLoading(false);
       }
     }
     fetchData();
@@ -61,7 +52,7 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.loading ? (
+        {loading ? (
           <>
             {[0, 1, 2, 3].map((i) => (
               <div
@@ -76,19 +67,37 @@ export default function Dashboard() {
               </div>
             ))}
           </>
-        ) : (
+        ) : data ? (
           <>
             {[
-              { label: "Total Automations", value: stats.totalWorkflows.toString(), subtext: "Active workflows", trend: "neutral" as const, icon: Zap },
-              { label: "Runs Today", value: "–", subtext: "Data unavailable", trend: "neutral" as const, icon: Activity },
-              { label: "Leads Captured", value: "–", subtext: "Data unavailable", trend: "neutral" as const, icon: Smartphone },
+              {
+                label: "Active Automations",
+                value: `${data.activeWorkflows} / ${data.totalWorkflows}`,
+                subtext: `${data.activeWorkflows} active, ${data.totalWorkflows - data.activeWorkflows} paused`,
+                trend: "neutral" as const,
+                icon: Zap,
+              },
+              {
+                label: "Runs Today",
+                value: data.todayRuns.toString(),
+                subtext: `${data.totalExecutions} total executions`,
+                trend: data.todayRuns > 0 ? ("up" as const) : ("neutral" as const),
+                icon: Activity,
+              },
+              {
+                label: "Success Rate",
+                value: `${data.successRate}%`,
+                subtext: `Across ${data.totalExecutions} executions`,
+                trend: (data.successRate >= 90 ? "up" : data.successRate >= 70 ? "neutral" : "down") as "up" | "neutral" | "down",
+                icon: CheckCircle,
+              },
               {
                 label: "System Status",
-                value: stats.n8nConnected ? "Online" : "Offline",
-                subtext: stats.n8nConnected ? "Connected to n8n" : "Check credentials",
-                trend: (stats.n8nConnected ? "up" : "down") as "up" | "down",
+                value: data.n8nConnected ? "Online" : "Offline",
+                subtext: data.n8nConnected ? "Connected to n8n" : "Check credentials",
+                trend: (data.n8nConnected ? "up" : "down") as "up" | "down",
                 icon: Server,
-                className: !stats.n8nConnected ? "!border-[#EF4444]/20" : "",
+                className: !data.n8nConnected ? "!border-[#EF4444]/20" : "",
               },
             ].map((card, i) => (
               <div
@@ -103,7 +112,7 @@ export default function Dashboard() {
               </div>
             ))}
           </>
-        )}
+        ) : null}
       </div>
 
       {/* Row 2: System Health & Status */}
@@ -116,7 +125,7 @@ export default function Dashboard() {
         }}
       >
         <div className="lg:col-span-2">
-          <SystemHealthChart />
+          <SystemHealthChart data={data?.hourlyVolume} />
         </div>
 
         {/* System Status List */}
@@ -132,7 +141,65 @@ export default function Dashboard() {
         >
           <h3 className="mb-5 text-[15px] font-medium" style={{ color: "#E5E7EB" }}>System Status</h3>
           <div className="space-y-4">
-            {/* PostgreSQL */}
+            {/* n8n Engine */}
+            <div
+              className="flex items-center justify-between pb-4 group"
+              style={{
+                borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
+                transition: "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1)",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{
+                  backgroundColor: data?.n8nConnected ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)",
+                  transition: "background-color 180ms",
+                }}>
+                  <Zap className="h-4 w-4" style={{
+                    color: loading ? "#475569" : (data?.n8nConnected ? "#22C55E" : "#EF4444"),
+                    transition: "color 180ms",
+                  }} strokeWidth={1.5} />
+                </div>
+                <span className="text-[13px] font-medium" style={{ color: "#E2E8F0" }}>n8n Engine</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={cn("h-1.5 w-1.5 rounded-full")}
+                  style={{
+                    backgroundColor: loading ? "#475569" : (data?.n8nConnected ? "#22C55E" : "#EF4444"),
+                    boxShadow: loading ? "none" : (data?.n8nConnected ? "0 0 6px rgba(34, 197, 94, 0.5)" : "0 0 6px rgba(239, 68, 68, 0.5)"),
+                    transition: "all 180ms",
+                  }}
+                />
+                <span className="text-[11px] font-medium" style={{
+                  color: loading ? "#475569" : (data?.n8nConnected ? "#22C55E" : "#EF4444"),
+                  transition: "color 180ms",
+                }}>
+                  {loading ? "Checking..." : (data?.n8nConnected ? "Running" : "Disconnected")}
+                </span>
+              </div>
+            </div>
+
+            {/* Workflows */}
+            <div
+              className="flex items-center justify-between pb-4 group"
+              style={{
+                borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
+                transition: "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1)",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: "rgba(59, 130, 246, 0.08)", transition: "background-color 180ms" }}>
+                  <Activity className="h-4 w-4" style={{ color: "#3B82F6" }} strokeWidth={1.5} />
+                </div>
+                <span className="text-[13px] font-medium" style={{ color: "#E2E8F0" }}>Active Workflows</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-semibold" style={{ color: "#3B82F6", fontFamily: "'JetBrains Mono', monospace" }}>
+                  {loading ? "…" : `${data?.activeWorkflows ?? 0}`}
+                </span>
+              </div>
+            </div>
+
+            {/* Total Executions */}
             <div
               className="flex items-center justify-between pb-4 group"
               style={{
@@ -144,66 +211,16 @@ export default function Dashboard() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: "rgba(34, 197, 94, 0.08)", transition: "background-color 180ms" }}>
                   <Database className="h-4 w-4" style={{ color: "#22C55E" }} strokeWidth={1.5} />
                 </div>
-                <span className="text-[13px] font-medium" style={{ color: "#E2E8F0" }}>PostgreSQL</span>
+                <span className="text-[13px] font-medium" style={{ color: "#E2E8F0" }}>Executions Logged</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#22C55E", boxShadow: "0 0 6px rgba(34, 197, 94, 0.5)" }} />
-                <span className="text-[11px] font-medium" style={{ color: "#22C55E" }}>Connected</span>
-              </div>
-            </div>
-
-            {/* n8n Engine */}
-            <div
-              className="flex items-center justify-between pb-4 group"
-              style={{
-                borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
-                transition: "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1)",
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: stats.n8nConnected ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)", transition: "background-color 180ms" }}>
-                  <Zap className="h-4 w-4" style={{ color: stats.loading ? "#475569" : (stats.n8nConnected ? "#22C55E" : "#EF4444"), transition: "color 180ms" }} strokeWidth={1.5} />
-                </div>
-                <span className="text-[13px] font-medium" style={{ color: "#E2E8F0" }}>n8n Engine</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={cn("h-1.5 w-1.5 rounded-full")}
-                  style={{
-                    backgroundColor: stats.loading ? "#475569" : (stats.n8nConnected ? "#22C55E" : "#EF4444"),
-                    boxShadow: stats.loading ? "none" : (stats.n8nConnected ? "0 0 6px rgba(34, 197, 94, 0.5)" : "0 0 6px rgba(239, 68, 68, 0.5)"),
-                    transition: "all 180ms",
-                  }}
-                />
-                <span className="text-[11px] font-medium" style={{
-                  color: stats.loading ? "#475569" : (stats.n8nConnected ? "#22C55E" : "#EF4444"),
-                  transition: "color 180ms",
-                }}>
-                  {stats.loading ? "Checking..." : (stats.n8nConnected ? "Running" : "Disconnected")}
+                <span className="text-[12px] font-semibold" style={{ color: "#22C55E", fontFamily: "'JetBrains Mono', monospace" }}>
+                  {loading ? "…" : `${data?.totalExecutions ?? 0}`}
                 </span>
               </div>
             </div>
 
-            {/* Email Service */}
-            <div
-              className="flex items-center justify-between pb-4 group"
-              style={{
-                borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
-                transition: "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1)",
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: "rgba(34, 197, 94, 0.08)", transition: "background-color 180ms" }}>
-                  <Server className="h-4 w-4" style={{ color: "#22C55E" }} strokeWidth={1.5} />
-                </div>
-                <span className="text-[13px] font-medium" style={{ color: "#E2E8F0" }}>Email Service</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#22C55E", boxShadow: "0 0 6px rgba(34, 197, 94, 0.5)" }} />
-                <span className="text-[11px] font-medium" style={{ color: "#22C55E" }}>Healthy</span>
-              </div>
-            </div>
-
-            {/* Webhooks */}
+            {/* Success Rate */}
             <div
               className="flex items-center justify-between group"
               style={{
@@ -211,14 +228,26 @@ export default function Dashboard() {
               }}
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: "rgba(245, 158, 11, 0.08)", transition: "background-color 180ms" }}>
-                  <Activity className="h-4 w-4" style={{ color: "#F59E0B" }} strokeWidth={1.5} />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{
+                  backgroundColor: (data?.successRate ?? 0) >= 90 ? "rgba(34, 197, 94, 0.08)" :
+                    (data?.successRate ?? 0) >= 70 ? "rgba(245, 158, 11, 0.08)" : "rgba(239, 68, 68, 0.08)",
+                  transition: "background-color 180ms",
+                }}>
+                  <CheckCircle className="h-4 w-4" style={{
+                    color: (data?.successRate ?? 0) >= 90 ? "#22C55E" :
+                      (data?.successRate ?? 0) >= 70 ? "#F59E0B" : "#EF4444",
+                  }} strokeWidth={1.5} />
                 </div>
-                <span className="text-[13px] font-medium" style={{ color: "#E2E8F0" }}>Webhooks</span>
+                <span className="text-[13px] font-medium" style={{ color: "#E2E8F0" }}>Success Rate</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#F59E0B", boxShadow: "0 0 6px rgba(245, 158, 11, 0.5)" }} />
-                <span className="text-[11px] font-medium" style={{ color: "#F59E0B" }}>Degraded</span>
+                <span className="text-[12px] font-semibold" style={{
+                  color: (data?.successRate ?? 0) >= 90 ? "#22C55E" :
+                    (data?.successRate ?? 0) >= 70 ? "#F59E0B" : "#EF4444",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}>
+                  {loading ? "…" : `${data?.successRate ?? 0}%`}
+                </span>
               </div>
             </div>
           </div>

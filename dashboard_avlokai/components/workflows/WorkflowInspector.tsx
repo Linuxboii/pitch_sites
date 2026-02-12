@@ -2,7 +2,7 @@
 
 import { Activity, Clock, Play } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { N8nWorkflow, ExecutionUI } from "@/app/actions/n8n";
+import { N8nWorkflow, N8nNode, ExecutionUI } from "@/app/types/n8n";
 
 interface WorkflowInspectorProps {
     workflow: N8nWorkflow | null;

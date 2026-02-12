@@ -1,33 +1,14 @@
 'use server';
 
-export interface N8nWorkflow {
-    id: string;
-    name: string;
-    active: boolean;
-    nodes: N8nNode[];
-    connections: N8nConnections;
-    updatedAt: string;
-    tags?: { name: string }[];
-}
-
-export interface N8nNode {
-    id: string;
-    name: string;
-    type: string;
-    typeVersion: number;
-    position: [number, number];
-    parameters?: Record<string, any>;
-}
-
-export interface N8nConnections {
-    [nodeName: string]: {
-        main: Array<Array<{
-            node: string;
-            type: string;
-            index: number;
-        }>>;
-    };
-}
+import {
+    N8nWorkflow,
+    N8nNode,
+    ExecutionUI,
+    ExecutionLogEntry,
+    ExecutionStats,
+    DashboardData,
+    WorkflowUI
+} from "@/app/types/n8n";
 
 interface N8nExecution {
     id: string;
@@ -35,30 +16,9 @@ interface N8nExecution {
     mode: string;
     startedAt: string;
     stoppedAt: string;
-    status: string; // 'success' | 'error' | 'running'
+    status: string;
     workflowId: string;
-    workflowName?: string; // Not always populated by API, might need lookup
-}
-
-export interface WorkflowUI {
-    id: string;
-    name: string;
-    description: string;
-    trigger: string;
-    status: 'active' | 'paused';
-    lastRun: string;
-    successRate: number;
-    runs: number;
-}
-
-export interface ExecutionUI {
-    id: string;
-    workflowName: string;
-    trigger: string;
-    status: 'success' | 'failed' | 'running';
-    duration: string;
-    timestamp: string;
-    workflowId: string;
+    workflowName?: string;
 }
 
 const BASE_URL = process.env.N8N_BASE_URL;
@@ -71,88 +31,210 @@ function getHeaders() {
     };
 }
 
-export async function getN8nStatus(): Promise<{ connected: boolean; version?: string }> {
+import { timeAgo, formatDuration, formatTimestamp, isToday, normalizeStatus } from "@/lib/formatters";
+
+function detectTrigger(nodes: N8nNode[]): string {
+    const triggerNode = nodes.find(node =>
+        node.type.includes('webhook') ||
+        node.type.includes('cron') ||
+        node.type.includes('trigger') ||
+        node.type.includes('schedule')
+    );
+    if (!triggerNode) return 'Manual';
+    const t = triggerNode.type.toLowerCase();
+    if (t.includes('webhook')) return 'Webhook';
+    if (t.includes('cron') || t.includes('schedule')) return 'Schedule';
+    if (t.includes('whatsapp')) return 'WhatsApp';
+    if (t.includes('email') || t.includes('imap')) return 'Email';
+    return 'Trigger';
+}
+
+// ── Raw API Calls ──────────────────────────────────────────────────
+
+async function fetchAllExecutions(limit = 250): Promise<N8nExecution[]> {
+    if (!BASE_URL || !API_KEY) return [];
+    try {
+        const res = await fetch(`${BASE_URL}/executions?limit=${limit}&includeData=false`, {
+            method: 'GET',
+            headers: getHeaders(),
+            next: { revalidate: 10 },
+        });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.data || [];
+    } catch {
+        return [];
+    }
+}
+
+async function fetchAllWorkflows(): Promise<N8nWorkflow[]> {
+    if (!BASE_URL || !API_KEY) return [];
+    try {
+        const res = await fetch(`${BASE_URL}/workflows?limit=250`, {
+            method: 'GET',
+            headers: getHeaders(),
+            next: { revalidate: 60 },
+        });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.data || [];
+    } catch {
+        return [];
+    }
+}
+
+// ── Public API ─────────────────────────────────────────────────────
+
+export async function getN8nStatus(): Promise<{ connected: boolean }> {
     if (!BASE_URL || !API_KEY) return { connected: false };
     try {
-        // Try fetching workflows as a health check
         const res = await fetch(`${BASE_URL}/workflows?limit=1`, {
             headers: getHeaders(),
-            next: { revalidate: 60 }
+            next: { revalidate: 60 },
         });
         return { connected: res.ok };
-    } catch (e) {
+    } catch {
         return { connected: false };
     }
 }
 
 export async function getWorkflowDetails(id: string): Promise<N8nWorkflow | null> {
     if (!BASE_URL || !API_KEY) return null;
-
     try {
         const response = await fetch(`${BASE_URL}/workflows/${id}`, {
             method: 'GET',
             headers: getHeaders(),
-            next: { revalidate: 30 }, // Cache for 30 seconds
+            next: { revalidate: 30 },
         });
-
-        if (!response.ok) {
-            console.error(`Failed to fetch workflow ${id}:`, response.statusText);
-            return null;
-        }
-
-        const data = await response.json();
-        return data; // returns the full workflow object including nodes and connections
-    } catch (error) {
-        console.error(`Error fetching workflow ${id}:`, error);
+        if (!response.ok) return null;
+        return await response.json();
+    } catch {
         return null;
     }
+}
+
+export async function getExecutionStats(): Promise<ExecutionStats> {
+    const executions = await fetchAllExecutions(250);
+
+    const perWorkflow = new Map<string, {
+        runs: number;
+        successCount: number;
+        failedCount: number;
+        successRate: number;
+        lastRunAt: string | null;
+    }>();
+
+    let successCount = 0;
+    let failedCount = 0;
+    let runningCount = 0;
+    let todayRuns = 0;
+
+    for (const exec of executions) {
+        const status = normalizeStatus(exec.status);
+        if (status === 'success') successCount++;
+        else if (status === 'failed') failedCount++;
+        else runningCount++;
+
+        if (isToday(exec.startedAt)) todayRuns++;
+
+        // Per-workflow stats
+        const wfStats = perWorkflow.get(exec.workflowId) || {
+            runs: 0, successCount: 0, failedCount: 0, successRate: 0, lastRunAt: null,
+        };
+        wfStats.runs++;
+        if (status === 'success') wfStats.successCount++;
+        if (status === 'failed') wfStats.failedCount++;
+        if (!wfStats.lastRunAt || new Date(exec.startedAt) > new Date(wfStats.lastRunAt)) {
+            wfStats.lastRunAt = exec.startedAt;
+        }
+        perWorkflow.set(exec.workflowId, wfStats);
+    }
+
+    // Calculate per-workflow success rates
+    for (const [, stats] of perWorkflow) {
+        stats.successRate = stats.runs > 0
+            ? Math.round((stats.successCount / stats.runs) * 100)
+            : 0;
+    }
+
+    const total = executions.length;
+    return {
+        totalExecutions: total,
+        todayRuns,
+        successCount,
+        failedCount,
+        runningCount,
+        successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
+        perWorkflow,
+    };
+}
+
+export async function getWorkflows(): Promise<WorkflowUI[]> {
+    const [workflows, stats] = await Promise.all([
+        fetchAllWorkflows(),
+        getExecutionStats(),
+    ]);
+
+    return workflows.map((workflow) => {
+        const trigger = detectTrigger(workflow.nodes);
+        const wfStats = stats.perWorkflow.get(workflow.id);
+
+        return {
+            id: workflow.id,
+            name: workflow.name,
+            description: workflow.tags?.map(t => t.name).join(', ') || summarizeWorkflow(workflow),
+            trigger,
+            status: workflow.active ? 'active' as const : 'paused' as const,
+            lastRun: wfStats?.lastRunAt ? timeAgo(wfStats.lastRunAt) : 'Never run',
+            lastRunTimestamp: wfStats?.lastRunAt || null,
+            successRate: wfStats?.successRate ?? 0,
+            runs: wfStats?.runs ?? 0,
+            nodeCount: workflow.nodes.length,
+        };
+    });
+}
+
+function summarizeWorkflow(workflow: N8nWorkflow): string {
+    const nodeTypes = workflow.nodes.map(n => {
+        const simple = n.type.split('.').pop() || n.type;
+        return simple.replace(/([A-Z])/g, ' $1').trim();
+    });
+    const unique = [...new Set(nodeTypes)].slice(0, 3);
+    return `${workflow.nodes.length} nodes · ${unique.join(', ')}`;
 }
 
 export async function getExecutions(limit = 20, workflowId?: string): Promise<ExecutionUI[]> {
     if (!BASE_URL || !API_KEY) return [];
 
     try {
-        // 1. Fetch Executions
         let url = `${BASE_URL}/executions?limit=${limit}&includeData=false`;
-        if (workflowId) {
-            url += `&workflowId=${workflowId}`;
-        }
+        if (workflowId) url += `&workflowId=${workflowId}`;
 
         const execRes = await fetch(url, {
             method: 'GET',
             headers: getHeaders(),
             next: { revalidate: 10 },
         });
-
         if (!execRes.ok) return [];
 
         const execData = await execRes.json();
         const executions: N8nExecution[] = execData.data;
 
-        // 2. Fetch Workflows to map names (only if not filtering by one, or optimization)
-        // If we have workflowId, we might technically know the name, but let's keep it simple
-        const workflows = await getWorkflows();
+        const workflows = await fetchAllWorkflows();
         const workflowMap = new Map(workflows.map(w => [w.id, w]));
 
         return executions.map(exec => {
             const workflow = workflowMap.get(exec.workflowId);
-            const startTime = new Date(exec.startedAt);
-            const endTime = exec.stoppedAt ? new Date(exec.stoppedAt) : new Date();
-            const durationMs = endTime.getTime() - startTime.getTime();
-
-            let duration = '';
-            if (durationMs < 1000) duration = `${durationMs}ms`;
-            else if (durationMs < 60000) duration = `${(durationMs / 1000).toFixed(1)}s`;
-            else duration = `${Math.floor(durationMs / 60000)}m ${(durationMs % 60000 / 1000).toFixed(0)}s`;
+            const trigger = workflow ? detectTrigger(workflow.nodes) : 'Unknown';
 
             return {
                 id: exec.id,
                 workflowId: exec.workflowId,
-                workflowName: workflow?.name || 'Unknown Workflow',
-                trigger: workflow?.trigger || 'Unknown',
-                status: (exec.status === 'running' || exec.status === 'new' || exec.status === 'waiting') ? 'running' : (exec.status === 'error' || exec.status === 'crashed' ? 'failed' : 'success'),
-                duration: exec.stoppedAt ? duration : '-',
-                timestamp: startTime.toLocaleString(),
+                workflowName: workflow?.name || `Workflow ${exec.workflowId.slice(0, 6)}…`,
+                trigger,
+                status: normalizeStatus(exec.status),
+                duration: exec.stoppedAt ? formatDuration(exec.startedAt, exec.stoppedAt) : '–',
+                timestamp: formatTimestamp(exec.startedAt),
             };
         });
     } catch (error) {
@@ -161,51 +243,101 @@ export async function getExecutions(limit = 20, workflowId?: string): Promise<Ex
     }
 }
 
-export async function getWorkflows(): Promise<WorkflowUI[]> {
+export async function getExecutionLogs(limit = 50): Promise<ExecutionLogEntry[]> {
     if (!BASE_URL || !API_KEY) return [];
 
     try {
-        const response = await fetch(`${BASE_URL}/workflows?limit=250`, {
-            method: 'GET',
-            headers: getHeaders(),
-            next: { revalidate: 60 },
-        });
+        const [executions, workflows] = await Promise.all([
+            fetchAllExecutions(limit),
+            fetchAllWorkflows(),
+        ]);
 
-        if (!response.ok) return [];
+        const workflowMap = new Map(workflows.map(w => [w.id, w]));
 
-        const data = await response.json();
-        const n8nWorkflows: N8nWorkflow[] = data.data;
+        return executions.map(exec => {
+            const workflow = workflowMap.get(exec.workflowId);
+            const status = normalizeStatus(exec.status);
+            const wfName = workflow?.name || `Workflow ${exec.workflowId.slice(0, 6)}…`;
+            const duration = exec.stoppedAt ? formatDuration(exec.startedAt, exec.stoppedAt) : null;
 
-        return n8nWorkflows.map((workflow) => {
-            let trigger = 'Event';
-            const triggerNode = workflow.nodes.find(node =>
-                node.type.includes('webhook') ||
-                node.type.includes('cron') ||
-                node.type.includes('trigger')
-            );
+            let level: 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
+            let message: string;
 
-            if (triggerNode) {
-                if (triggerNode.type.includes('webhook')) trigger = 'Webhook';
-                else if (triggerNode.type.includes('cron') || triggerNode.type.includes('schedule')) trigger = 'Cron';
+            switch (status) {
+                case 'success':
+                    level = 'INFO';
+                    message = `Workflow "${wfName}" completed successfully${duration ? ` in ${duration}` : ''}`;
+                    break;
+                case 'failed':
+                    level = 'ERROR';
+                    message = `Workflow "${wfName}" execution failed${duration ? ` after ${duration}` : ''}`;
+                    break;
+                case 'running':
+                    level = 'INFO';
+                    message = `Workflow "${wfName}" is currently running`;
+                    break;
+                default:
+                    level = 'WARN';
+                    message = `Workflow "${wfName}" ended with status: ${exec.status}`;
             }
 
-            // Mock stats as we can't efficiently aggregate all executions yet
-            const runs = 0;
-            const successRate = 0;
-
             return {
-                id: workflow.id,
-                name: workflow.name,
-                description: workflow.tags?.map(t => t.name).join(', ') || 'No description',
-                trigger,
-                status: workflow.active ? 'active' : 'paused',
-                lastRun: new Date(workflow.updatedAt).toLocaleDateString(),
-                successRate,
-                runs,
+                id: `log-${exec.id}`,
+                timestamp: exec.startedAt,
+                level,
+                message,
+                workflow: wfName,
+                workflowId: exec.workflowId,
+                executionId: exec.id,
+                duration: duration || undefined,
             };
         });
     } catch (error) {
-        console.error('Error fetching workflows:', error);
+        console.error('Error fetching execution logs:', error);
         return [];
     }
+}
+
+export async function getDashboardData(): Promise<DashboardData> {
+    const [workflows, status, stats, recentExecutions, allExecutions] = await Promise.all([
+        fetchAllWorkflows(),
+        getN8nStatus(),
+        getExecutionStats(),
+        getExecutions(5),
+        fetchAllExecutions(250),
+    ]);
+
+    // Build hourly volume from executions (last 24 hours)
+    const now = new Date();
+    const hourlyMap = new Map<string, number>();
+
+    // Initialize all 24 hours
+    for (let i = 0; i < 24; i++) {
+        const hr = i.toString().padStart(2, '0') + ':00';
+        hourlyMap.set(hr, 0);
+    }
+
+    for (const exec of allExecutions) {
+        const execDate = new Date(exec.startedAt);
+        const hoursDiff = (now.getTime() - execDate.getTime()) / (1000 * 60 * 60);
+        if (hoursDiff <= 24) {
+            const hr = execDate.getHours().toString().padStart(2, '0') + ':00';
+            hourlyMap.set(hr, (hourlyMap.get(hr) || 0) + 1);
+        }
+    }
+
+    const hourlyVolume = Array.from(hourlyMap.entries())
+        .map(([time, runs]) => ({ time, runs }))
+        .sort((a, b) => a.time.localeCompare(b.time));
+
+    return {
+        totalWorkflows: workflows.length,
+        activeWorkflows: workflows.filter(w => w.active).length,
+        n8nConnected: status.connected,
+        todayRuns: stats.todayRuns,
+        successRate: stats.successRate,
+        totalExecutions: stats.totalExecutions,
+        recentExecutions,
+        hourlyVolume,
+    };
 }
